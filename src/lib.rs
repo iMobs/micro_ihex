@@ -1,5 +1,7 @@
 #![no_std]
 
+use hex;
+
 #[derive(Debug, PartialEq)]
 pub enum IHexError {
     MissingColon,
@@ -38,7 +40,11 @@ impl IHex {
 
         let mut bytes = [0; 0x110];
 
-        let length = hex_to_slice(line, &mut bytes)?;
+        let length = line.len() / 2;
+
+        if let Err(_) = hex::decode_to_slice(line, &mut bytes[..length]) {
+            return Err(IHexError::ParseError);
+        }
 
         let expected_checksum = bytes[length - 1];
         let bytes = &bytes[..length - 1];
@@ -118,35 +124,6 @@ impl IHex {
     }
 }
 
-fn hex_to_slice<T: AsRef<[u8]>>(data: T, out: &mut [u8]) -> Result<usize, IHexError> {
-    let data = data.as_ref();
-
-    if data.len() % 2 != 0 {
-        // TODO: Replace with something more specific
-        return Err(IHexError::ParseError);
-    }
-
-    if data.len() / 2 > out.len() {
-        // TODO: Replace with something more specific
-        return Err(IHexError::ParseError);
-    }
-
-    for (i, nibs) in data.chunks(2).enumerate() {
-        out[i] = get_nib(nibs[0])? << 4 | get_nib(nibs[1])?;
-    }
-
-    Ok(data.len() / 2)
-}
-
-fn get_nib(c: u8) -> Result<u8, IHexError> {
-    match c {
-        b'A'..=b'F' => Ok(c - b'A' + 10),
-        b'a'..=b'f' => Ok(c - b'a' + 10),
-        b'0'..=b'9' => Ok(c - b'0'),
-        _ => Err(IHexError::ParseError),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,32 +185,5 @@ mod tests {
             IHex::parse(":0400000512345678E3"),
             Ok(IHex::StartLinearAddress(0x12345678))
         );
-    }
-
-    #[test]
-    fn parse_hex() {
-        let mut buffer = [0u8; 4];
-
-        let length = hex_to_slice("DEAD", &mut buffer).unwrap();
-        assert_eq!(length, 2);
-        assert_eq!(buffer[..length], [0xDE, 0xAD]);
-
-        assert_eq!(
-            hex_to_slice("DEADBEE", &mut buffer),
-            Err(IHexError::ParseError)
-        );
-
-        assert_eq!(
-            hex_to_slice("DEADBEEEEF", &mut buffer),
-            Err(IHexError::ParseError)
-        );
-    }
-
-    #[test]
-    fn parse_nib() {
-        assert_eq!(get_nib(b'4'), Ok(4));
-        assert_eq!(get_nib(b'C'), Ok(12));
-        assert_eq!(get_nib(b'c'), Ok(12));
-        assert_eq!(get_nib(b'g'), Err(IHexError::ParseError));
     }
 }
