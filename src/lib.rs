@@ -29,16 +29,19 @@ pub enum IHex {
 }
 
 impl IHex {
-    pub fn parse(line: &str) -> Result<IHex, IHexError> {
-        if let Some(':') = line.chars().next() {
-            // Do nothing
-        } else {
+    pub fn parse<T>(line: T) -> Result<IHex, IHexError>
+    where
+        T: AsRef<[u8]>,
+    {
+        let line = line.as_ref();
+
+        if line[0] != b':' {
             return Err(IHexError::MissingColon);
         }
 
         let line = &line[1..];
 
-        let mut bytes = [0; 0x110];
+        let mut bytes = [0; 0x200];
 
         let length = line.len() / 2;
 
@@ -122,6 +125,29 @@ impl IHex {
             _ => Err(IHexError::BadType),
         }
     }
+
+    pub fn parse_lines<T>(lines: T) -> IHexIter<T> {
+        IHexIter { lines }
+    }
+}
+
+pub struct IHexIter<T> {
+    lines: T,
+}
+
+impl<T, U> Iterator for IHexIter<T>
+where
+    T: Iterator<Item = U>,
+    U: AsRef<[u8]>,
+{
+    type Item = Result<IHex, IHexError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.lines.next() {
+            Some(line) => Some(IHex::parse(line)),
+            None => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -185,5 +211,70 @@ mod tests {
             IHex::parse(":0400000512345678E3"),
             Ok(IHex::StartLinearAddress(0x12345678))
         );
+    }
+
+    struct TestLineBuffer {
+        line: u8,
+        buffer: [u8; 0x200],
+    }
+
+    impl TestLineBuffer {
+        fn new() -> Self {
+            TestLineBuffer {
+                line: 0,
+                buffer: [0u8; 0x200],
+            }
+        }
+    }
+
+    impl Iterator for TestLineBuffer {
+        type Item = [u8; 0x200];
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.line < 5 {
+                self.line += 1;
+                return Some(self.buffer);
+            }
+
+            None
+        }
+    }
+
+    #[test]
+    fn iterating_over_lines() {
+        let expected = [
+            0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x20, 0x67, 0x61, 0x70,
+        ];
+
+        let mut bytes = [0; 0xFF];
+        bytes[..expected.len()].clone_from_slice(&expected);
+
+        let lines = [
+            ":0B0010006164647265737320676170A7",
+            ":0200000212FEEC",
+            ":00000001FF",
+        ];
+
+        let mut iter = IHex::parse_lines(lines.iter());
+
+        assert_eq!(
+            iter.next(),
+            Some(Ok(IHex::Data {
+                bytes,
+                length: expected.len() as u8,
+                offset: 0x0010,
+            }))
+        );
+
+        assert_eq!(iter.next(), Some(Ok(IHex::ExtendedSegmentAddress(0x12FE))));
+
+        assert_eq!(iter.next(), Some(Ok(IHex::EndOfFile)));
+
+        assert_eq!(iter.next(), None);
+
+        let line_buffer = TestLineBuffer::new();
+        let mut iter = IHex::parse_lines(line_buffer);
+
+        assert_eq!(iter.next(), Some(Err(IHexError::MissingColon)))
     }
 }
