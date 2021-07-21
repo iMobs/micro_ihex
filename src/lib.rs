@@ -1,7 +1,5 @@
 #![no_std]
 
-use hex;
-
 #[derive(Debug, PartialEq)]
 pub enum IHexError {
     MissingColon,
@@ -50,19 +48,18 @@ impl IHex {
 
         let line = &line[1..];
 
-        let mut bytes = [0; 0x110];
+        let mut bytes = [0; 0x200];
 
         let length = line.len() / 2;
 
-        if let Err(_) = hex::decode_to_slice(line, &mut bytes[..length]) {
+        if hex::decode_to_slice(line, &mut bytes[..length]).is_err() {
             return Err(IHexError::ParseError);
         }
 
         let expected_checksum = bytes[length - 1];
         let bytes = &bytes[..length - 1];
 
-        let checksum =
-            0u8.wrapping_sub(bytes.iter().fold(0u8, |acc, &byte| acc.wrapping_add(byte)));
+        let checksum = 0u8.wrapping_sub(checksum(bytes));
 
         if checksum != expected_checksum {
             return Err(IHexError::BadChecksum(checksum, expected_checksum));
@@ -134,6 +131,38 @@ impl IHex {
         }
     }
 
+    pub fn serialize<T>(&self, buffer: &mut T)
+    where
+        T: AsMut<[u8]>,
+    {
+        let record_type = self.record_type();
+
+        match self {
+            Self::Data {
+                bytes,
+                length,
+                offset,
+            } => format(record_type, *offset, &bytes[..*length as usize], buffer),
+            Self::EndOfFile => format(record_type, 0, &[], buffer),
+            Self::ExtendedSegmentAddress(address) => {
+                format(record_type, 0, &address.to_be_bytes(), buffer)
+            }
+            Self::StartSegmentAddress { cs, ip } => {
+                let mut word = [0; 4];
+                word[..2].copy_from_slice(&cs.to_be_bytes());
+                word[2..].copy_from_slice(&ip.to_be_bytes());
+
+                format(record_type, 0, &word, buffer)
+            }
+            Self::ExtendedLinearAddress(address) => {
+                format(record_type, 0, &address.to_be_bytes(), buffer)
+            }
+            Self::StartLinearAddress(address) => {
+                format(record_type, 0, &address.to_be_bytes(), buffer)
+            }
+        }
+    }
+
     pub fn record_type(&self) -> u8 {
         match self {
             Self::Data { .. } => types::DATA,
@@ -143,6 +172,36 @@ impl IHex {
             Self::ExtendedLinearAddress(_) => types::EXTENDED_LINEAR_ADDRESS,
             Self::StartLinearAddress(_) => types::START_LINEAR_ADDRESS,
         }
+    }
+}
+
+fn checksum(bytes: &[u8]) -> u8 {
+    bytes.iter().fold(0u8, |acc, &byte| acc.wrapping_add(byte))
+}
+
+fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T)
+where
+    T: AsMut<[u8]>,
+{
+    let buffer = buffer.as_mut();
+    let mut bytes = [0; 0x200];
+    let data_length = 1 + 2 + 1 + data.len() + 1;
+
+    let buffer_length = 2 * data_length + 1;
+    if buffer.len() < buffer_length {
+        // Freak out
+    }
+
+    bytes[0] = data.len() as u8;
+    bytes[1..3].copy_from_slice(&offset.to_be_bytes());
+    bytes[3] = record_type;
+    bytes[4..data_length - 1].copy_from_slice(data);
+    bytes[data_length - 1] = checksum(&bytes[..data_length - 1]);
+
+    buffer[0] = b':';
+
+    if hex::encode_to_slice(&bytes[..data_length], &mut buffer[1..buffer_length]).is_err() {
+        // Freak out
     }
 }
 
