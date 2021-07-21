@@ -28,11 +28,23 @@ pub enum IHex {
     StartLinearAddress(u32),
 }
 
+pub mod types {
+    pub const DATA: u8 = 0x00;
+    pub const END_OF_FILE: u8 = 0x01;
+    pub const EXTENDED_SEGMENT_ADDRESS: u8 = 0x02;
+    pub const START_SEGMENT_ADDRESS: u8 = 0x03;
+    pub const EXTENDED_LINEAR_ADDRESS: u8 = 0x04;
+    pub const START_LINEAR_ADDRESS: u8 = 0x05;
+}
+
 impl IHex {
-    pub fn parse(line: &str) -> Result<IHex, IHexError> {
-        if let Some(':') = line.chars().next() {
-            // Do nothing
-        } else {
+    pub fn parse<T>(line: T) -> Result<IHex, IHexError>
+    where
+        T: AsRef<[u8]>,
+    {
+        let line = line.as_ref();
+
+        if line[0] != b':' {
             return Err(IHexError::MissingColon);
         }
 
@@ -70,9 +82,8 @@ impl IHex {
             return Err(IHexError::BadLength);
         }
 
-        // TODO: Replace with constants
         match record_type {
-            0 => {
+            types::DATA => {
                 let mut bytes = [0; 0xFF];
 
                 bytes[..data.len()].clone_from_slice(data);
@@ -83,8 +94,8 @@ impl IHex {
                     offset: address,
                 })
             }
-            1 => Ok(IHex::EndOfFile),
-            2 => {
+            types::END_OF_FILE => Ok(IHex::EndOfFile),
+            types::EXTENDED_SEGMENT_ADDRESS => {
                 let mut short = [0; 2];
 
                 short.clone_from_slice(&data[0..2]);
@@ -92,7 +103,7 @@ impl IHex {
 
                 Ok(IHex::ExtendedSegmentAddress(address))
             }
-            3 => {
+            types::START_SEGMENT_ADDRESS => {
                 let mut short = [0; 2];
 
                 short.clone_from_slice(&data[0..2]);
@@ -103,7 +114,7 @@ impl IHex {
 
                 Ok(IHex::StartSegmentAddress { cs, ip })
             }
-            4 => {
+            types::EXTENDED_LINEAR_ADDRESS => {
                 let mut short = [0; 2];
 
                 short.clone_from_slice(&data[0..2]);
@@ -111,7 +122,7 @@ impl IHex {
 
                 Ok(IHex::ExtendedLinearAddress(ela))
             }
-            5 => {
+            types::START_LINEAR_ADDRESS => {
                 let mut word = [0; 4];
 
                 word.clone_from_slice(&data[0..4]);
@@ -120,6 +131,17 @@ impl IHex {
                 Ok(IHex::StartLinearAddress(sla))
             }
             _ => Err(IHexError::BadType),
+        }
+    }
+
+    pub fn record_type(&self) -> u8 {
+        match self {
+            Self::Data { .. } => types::DATA,
+            Self::EndOfFile => types::END_OF_FILE,
+            Self::ExtendedSegmentAddress(_) => types::EXTENDED_SEGMENT_ADDRESS,
+            Self::StartSegmentAddress { .. } => types::START_SEGMENT_ADDRESS,
+            Self::ExtendedLinearAddress(_) => types::EXTENDED_LINEAR_ADDRESS,
+            Self::StartLinearAddress(_) => types::START_LINEAR_ADDRESS,
         }
     }
 }
