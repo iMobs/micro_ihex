@@ -13,7 +13,7 @@ jobs:
   build:
     strategy:
       matrix:
-        platform: [ubuntu-latest, windows-latest, macos-latest]
+        platform: [ubuntu-latest, windows-latest]
         toolchain: [stable, beta, nightly]
 
     runs-on: ${{ matrix.platform }}
@@ -47,3 +47,25 @@ jobs:
         with:
           command: test
           args: --verbose
+
+  build-no-std:
+    name: Build no_std
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          target: thumbv6m-none-eabi
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --no-default-features --target thumbv6m-none-eabi
