@@ -3,7 +3,7 @@ use crate::IHex;
 
 #[derive(Debug, PartialEq)]
 pub enum SerializeError {
-    EncodeError,
+    EncodeError(hex::FromHexError),
 }
 
 type SerializeResult = Result<usize, SerializeError>;
@@ -64,8 +64,8 @@ where
 
     buffer[0] = b':';
 
-    if hex::encode_to_slice(&bytes[..data_length], &mut buffer[1..buffer_length]).is_err() {
-        return Err(SerializeError::EncodeError);
+    if let Err(e) = hex::encode_to_slice(&bytes[..data_length], &mut buffer[1..buffer_length]) {
+        return Err(SerializeError::EncodeError(e));
     }
 
     Ok(buffer_length)

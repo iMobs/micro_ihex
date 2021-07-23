@@ -7,7 +7,7 @@ use core::str::FromStr;
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     MissingColon,
-    ParseError,
+    DecodeError(hex::FromHexError),
     BadChecksum(u8, u8),
     BadLength,
     BadType,
@@ -29,8 +29,8 @@ impl IHex {
 
         let length = line.len() / 2;
 
-        if hex::decode_to_slice(line, &mut bytes[..length]).is_err() {
-            return Err(ParseError::ParseError);
+        if let Err(e) = hex::decode_to_slice(line, &mut bytes[..length]) {
+            return Err(ParseError::DecodeError(e));
         }
 
         let expected_checksum = bytes[length - 1];
