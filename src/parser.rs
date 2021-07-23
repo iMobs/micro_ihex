@@ -1,17 +1,26 @@
 use crate::checksum::checksum;
 use crate::types;
-use crate::{IHex, IHexError};
+use crate::IHex;
 use core::iter::FusedIterator;
 use core::str::FromStr;
 
-type ParseResult = Result<IHex, IHexError>;
+#[derive(Debug, PartialEq)]
+pub enum ParseError {
+    MissingColon,
+    ParseError,
+    BadChecksum(u8, u8),
+    BadLength,
+    BadType,
+}
+
+type ParseResult = Result<IHex, ParseError>;
 
 impl IHex {
     pub fn parse<T: AsRef<[u8]>>(line: T) -> ParseResult {
         let line = line.as_ref();
 
         if line[0] != b':' {
-            return Err(IHexError::MissingColon);
+            return Err(ParseError::MissingColon);
         }
 
         let line = &line[1..];
@@ -21,7 +30,7 @@ impl IHex {
         let length = line.len() / 2;
 
         if hex::decode_to_slice(line, &mut bytes[..length]).is_err() {
-            return Err(IHexError::ParseError);
+            return Err(ParseError::ParseError);
         }
 
         let expected_checksum = bytes[length - 1];
@@ -30,7 +39,7 @@ impl IHex {
         let checksum = checksum(bytes);
 
         if checksum != expected_checksum {
-            return Err(IHexError::BadChecksum(checksum, expected_checksum));
+            return Err(ParseError::BadChecksum(checksum, expected_checksum));
         }
 
         let length = bytes[0];
@@ -44,7 +53,7 @@ impl IHex {
         let data = &bytes[4..];
 
         if data.len() != length as usize {
-            return Err(IHexError::BadLength);
+            return Err(ParseError::BadLength);
         }
 
         match record_type {
@@ -95,13 +104,13 @@ impl IHex {
 
                 Ok(IHex::StartLinearAddress(sla))
             }
-            _ => Err(IHexError::BadType),
+            _ => Err(ParseError::BadType),
         }
     }
 }
 
 impl FromStr for IHex {
-    type Err = IHexError;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         IHex::parse(s)

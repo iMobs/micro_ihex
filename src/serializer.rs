@@ -1,8 +1,15 @@
 use crate::checksum::checksum;
 use crate::IHex;
 
+#[derive(Debug, PartialEq)]
+pub enum SerializeError {
+    EncodeError,
+}
+
+type SerializeResult = Result<usize, SerializeError>;
+
 impl IHex {
-    pub fn serialize<T>(&self, buffer: &mut T) -> Result<usize, ()>
+    pub fn serialize<T>(&self, buffer: &mut T) -> SerializeResult
     where
         T: AsMut<[u8]>,
     {
@@ -35,7 +42,7 @@ impl IHex {
     }
 }
 
-fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T) -> Result<usize, ()>
+fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T) -> SerializeResult
 where
     T: AsMut<[u8]>,
 {
@@ -58,7 +65,7 @@ where
     buffer[0] = b':';
 
     if hex::encode_to_slice(&bytes[..data_length], &mut buffer[1..buffer_length]).is_err() {
-        // Freak out
+        return Err(SerializeError::EncodeError);
     }
 
     Ok(buffer_length)
