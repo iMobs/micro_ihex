@@ -3,9 +3,10 @@
 mod checksum;
 mod error;
 mod ihex;
-mod parse;
-mod serialize;
+mod parser;
+mod serializer;
 mod types;
 
 pub use error::*;
 pub use ihex::*;
+pub use parser::*;

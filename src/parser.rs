@@ -1,26 +1,13 @@
 use crate::checksum::checksum;
 use crate::types;
 use crate::{IHex, IHexError};
+use core::iter::FusedIterator;
+use core::str::FromStr;
 
-#[cfg(feature = "alloc")]
-extern crate alloc;
-#[cfg(feature = "alloc")]
-use alloc::boxed::Box;
+type ParseResult = Result<IHex, IHexError>;
 
 impl IHex {
-    #[cfg(feature = "alloc")]
-    pub fn parse_multi<'a>(
-        string: &'a str,
-    ) -> Box<dyn Iterator<Item = Result<IHex, IHexError>> + 'a> {
-        let lines = string.lines().map(Self::parse);
-
-        Box::new(lines)
-    }
-
-    pub fn parse<T>(line: T) -> Result<IHex, IHexError>
-    where
-        T: AsRef<[u8]>,
-    {
+    pub fn parse<T: AsRef<[u8]>>(line: T) -> ParseResult {
         let line = line.as_ref();
 
         if line[0] != b':' {
@@ -113,40 +100,55 @@ impl IHex {
     }
 }
 
+impl FromStr for IHex {
+    type Err = IHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        IHex::parse(s)
+    }
+}
+
+pub struct Parser<'a> {
+    inner: core::str::Lines<'a>,
+    done: bool,
+}
+
+impl<'a> Parser<'a> {
+    pub fn new(s: &'a str) -> Self {
+        Parser {
+            inner: s.lines(),
+            done: false,
+        }
+    }
+
+    fn next_line(&mut self) -> Option<&'a str> {
+        while let Some(line) = self.inner.next() {
+            if !line.is_empty() {
+                return Some(line);
+            }
+        }
+
+        None
+    }
+}
+
+impl<'a> Iterator for Parser<'a> {
+    type Item = ParseResult;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        self.next_line().map(IHex::parse)
+    }
+}
+
+impl<'a> FusedIterator for Parser<'a> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(feature = "alloc")]
-    use alloc::{string::String, vec, vec::Vec};
-
-    #[test]
-    #[cfg(feature = "alloc")]
-    fn parse_string() {
-        let data = String::from(":00000001FF");
-        assert_eq!(IHex::parse(data), Ok(IHex::EndOfFile));
-    }
-
-    #[test]
-    #[cfg(feature = "alloc")]
-    fn parse_vec() {
-        let data = String::from(":00000001FF").into_bytes();
-        assert_eq!(IHex::parse(data), Ok(IHex::EndOfFile));
-    }
-
-    #[test]
-    #[cfg(feature = "alloc")]
-    fn parse_multi() {
-        let string = String::from(":0200000212FEEC\r\n:00000001FF\r\n");
-        let result = IHex::parse_multi(&string)
-            .collect::<Result<Vec<IHex>, IHexError>>()
-            .unwrap();
-
-        assert_eq!(
-            result,
-            vec![IHex::ExtendedSegmentAddress(0x12FE), IHex::EndOfFile]
-        )
-    }
 
     #[test]
     fn parse_data() {
@@ -156,54 +158,62 @@ mod tests {
 
         let mut bytes = [0; 0xFF];
         bytes[..expected.len()].clone_from_slice(&expected);
+        let data = IHex::Data {
+            bytes,
+            length: expected.len() as u8,
+            offset: 0x0010,
+        };
 
-        assert_eq!(
-            IHex::parse(":0B0010006164647265737320676170A7"),
-            Ok(IHex::Data {
-                bytes,
-                length: expected.len() as u8,
-                offset: 0x0010,
-            })
-        );
+        assert_eq!(":0B0010006164647265737320676170A7".parse(), Ok(data));
     }
 
     #[test]
     fn parse_eof() {
-        assert_eq!(IHex::parse(":00000001FF"), Ok(IHex::EndOfFile));
+        let eof = IHex::EndOfFile;
+
+        assert_eq!(":00000001FF".parse(), Ok(eof));
     }
 
     #[test]
     fn parse_extended_segment_address() {
-        assert_eq!(
-            IHex::parse(":0200000212FEEC"),
-            Ok(IHex::ExtendedSegmentAddress(0x12FE))
-        );
+        let esa = IHex::ExtendedSegmentAddress(0x12FE);
+
+        assert_eq!(":0200000212FEEC".parse(), Ok(esa));
     }
 
     #[test]
     fn parse_start_segment_address() {
-        assert_eq!(
-            IHex::parse(":04000003123438007B"),
-            Ok(IHex::StartSegmentAddress {
-                cs: 0x1234,
-                ip: 0x3800
-            })
-        );
+        let ssa = IHex::StartSegmentAddress {
+            cs: 0x1234,
+            ip: 0x3800,
+        };
+
+        assert_eq!(":04000003123438007B".parse(), Ok(ssa));
     }
 
     #[test]
     fn parse_extended_linear_address() {
-        assert_eq!(
-            IHex::parse(":02000004ABCD82"),
-            Ok(IHex::ExtendedLinearAddress(0xABCD))
-        );
+        let ela = IHex::ExtendedLinearAddress(0xABCD);
+
+        assert_eq!(":02000004ABCD82".parse(), Ok(ela));
     }
 
     #[test]
     fn parse_start_linear_address() {
-        assert_eq!(
-            IHex::parse(":0400000512345678E3"),
-            Ok(IHex::StartLinearAddress(0x12345678))
-        );
+        let sla = IHex::StartLinearAddress(0x12345678);
+
+        assert_eq!(":0400000512345678E3".parse(), Ok(sla));
+    }
+
+    #[test]
+    fn multi_line_parser() {
+        let ela = IHex::ExtendedLinearAddress(0xABCD);
+        let sla = IHex::StartLinearAddress(0x12345678);
+
+        let mut parser = Parser::new(":02000004ABCD82\r\n\r\n:0400000512345678E3\r\n");
+
+        assert_eq!(parser.next(), Some(Ok(ela)));
+        assert_eq!(parser.next(), Some(Ok(sla)));
+        assert_eq!(parser.next(), None)
     }
 }

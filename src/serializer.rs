@@ -2,7 +2,7 @@ use crate::checksum::checksum;
 use crate::IHex;
 
 impl IHex {
-    pub fn serialize<T>(&self, buffer: &mut T) -> usize
+    pub fn serialize<T>(&self, buffer: &mut T) -> Result<usize, ()>
     where
         T: AsMut<[u8]>,
     {
@@ -35,7 +35,7 @@ impl IHex {
     }
 }
 
-fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T) -> usize
+fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T) -> Result<usize, ()>
 where
     T: AsMut<[u8]>,
 {
@@ -61,7 +61,7 @@ where
         // Freak out
     }
 
-    buffer_length
+    Ok(buffer_length)
 }
 
 #[cfg(test)]
@@ -84,7 +84,7 @@ mod tests {
         };
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer);
+        let length = record.serialize(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":0b0010006164647265737320676170a7");
     }
@@ -94,7 +94,7 @@ mod tests {
         let record = IHex::EndOfFile;
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer);
+        let length = record.serialize(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":00000001ff");
     }
@@ -104,7 +104,7 @@ mod tests {
         let record = IHex::ExtendedSegmentAddress(0x12FE);
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer);
+        let length = record.serialize(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":0200000212feec");
     }
@@ -117,7 +117,7 @@ mod tests {
         };
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer);
+        let length = record.serialize(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":04000003123438007b");
     }
@@ -127,7 +127,7 @@ mod tests {
         let record = IHex::ExtendedLinearAddress(0xABCD);
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer);
+        let length = record.serialize(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":02000004abcd82");
     }
@@ -137,7 +137,7 @@ mod tests {
         let record = IHex::StartLinearAddress(0x12345678);
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer);
+        let length = record.serialize(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":0400000512345678e3");
     }
