@@ -122,7 +122,7 @@ impl<'a> Parser<'a> {
     }
 
     fn next_line(&mut self) -> Option<&'a str> {
-        while let Some(line) = self.inner.next() {
+        for line in &mut self.inner {
             if !line.is_empty() {
                 return Some(line);
             }
