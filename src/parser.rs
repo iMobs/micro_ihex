@@ -1,6 +1,7 @@
 use crate::checksum::checksum;
 use crate::types;
 use crate::IHex;
+use core::fmt;
 use core::iter::FusedIterator;
 use core::str::FromStr;
 
@@ -11,6 +12,22 @@ pub enum ParseError {
     BadChecksum(u8, u8),
     BadLength,
     BadType,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseError::MissingColon => write!(f, "missing start colon"),
+            ParseError::DecodeError(e) => write!(f, "hex decode error: {}", e),
+            ParseError::BadChecksum(expected, checksum) => write!(
+                f,
+                "incorrect checksum: expected {}, got {}",
+                expected, checksum
+            ),
+            ParseError::BadLength => write!(f, "incorrect data length"),
+            ParseError::BadType => write!(f, "unknown record type"),
+        }
+    }
 }
 
 type ParseResult = Result<IHex, ParseError>;
@@ -39,7 +56,7 @@ impl IHex {
         let checksum = checksum(bytes);
 
         if checksum != expected_checksum {
-            return Err(ParseError::BadChecksum(checksum, expected_checksum));
+            return Err(ParseError::BadChecksum(expected_checksum, checksum));
         }
 
         let length = bytes[0];
