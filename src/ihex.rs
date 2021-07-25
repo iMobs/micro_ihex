@@ -1,8 +1,16 @@
 use crate::types;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
 #[derive(Debug, PartialEq)]
 pub enum IHex {
     Data {
+        #[cfg(feature = "alloc")]
+        bytes: Vec<u8>,
+        #[cfg(not(feature = "alloc"))]
         bytes: [u8; 0xFF],
         length: u8,
         offset: u16,

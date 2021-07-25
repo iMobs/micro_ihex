@@ -1,18 +1,21 @@
 use crate::checksum::checksum;
 use crate::IHex;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "alloc")]
+use alloc::{string::String, vec, vec::Vec};
+
 #[derive(Debug, PartialEq)]
 pub enum SerializeError {
     EncodeError(hex::FromHexError),
 }
 
-type SerializeResult = Result<usize, SerializeError>;
-
 impl IHex {
-    pub fn serialize<T>(&self, buffer: &mut T) -> SerializeResult
-    where
-        T: AsMut<[u8]>,
-    {
+    pub fn serialize_to_slice<T: AsMut<[u8]>>(
+        &self,
+        buffer: &mut T,
+    ) -> Result<usize, SerializeError> {
         let record_type = self.record_type();
 
         match self {
@@ -40,9 +43,50 @@ impl IHex {
             }
         }
     }
+
+    #[cfg(feature = "alloc")]
+    pub fn serialize_to_vec(&self) -> Result<Vec<u8>, SerializeError> {
+        let mut output = vec![0; self.required_length()];
+
+        let length = self.serialize_to_slice(&mut output)?;
+
+        output.truncate(length);
+
+        Ok(output)
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn serialize_to_string(&self) -> Result<String, SerializeError> {
+        let bytes = self.serialize_to_vec()?;
+
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    fn required_length(&self) -> usize {
+        let mut length: usize = 1 + // length
+            2 + // offset
+            1 + // record type
+            1; //checksum
+
+        length += match self {
+            IHex::Data { length, .. } => *length as usize,
+            IHex::EndOfFile => 0,
+            IHex::ExtendedSegmentAddress(_) => 2,
+            IHex::StartSegmentAddress { .. } => 4,
+            IHex::ExtendedLinearAddress(_) => 2,
+            IHex::StartLinearAddress(_) => 4,
+        };
+
+        length * 2
+    }
 }
 
-fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T) -> SerializeResult
+fn format<T>(
+    record_type: u8,
+    offset: u16,
+    data: &[u8],
+    buffer: &mut T,
+) -> Result<usize, SerializeError>
 where
     T: AsMut<[u8]>,
 {
@@ -76,6 +120,28 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "alloc")]
+    fn serialize_data() {
+        let bytes = vec![
+            0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x20, 0x67, 0x61, 0x70,
+        ];
+        let length = bytes.len() as u8;
+
+        let record = IHex::Data {
+            bytes,
+            length,
+            offset: 0x0010,
+        };
+
+        let output = record.serialize_to_vec().unwrap();
+        assert_eq!(&output, b":0b0010006164647265737320676170a7");
+
+        let output = record.serialize_to_string().unwrap();
+        assert_eq!(&output, ":0b0010006164647265737320676170a7");
+    }
+
+    #[test]
+    #[cfg(not(feature = "alloc"))]
     fn serialize_data() {
         let expected = [
             0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x20, 0x67, 0x61, 0x70,
@@ -91,7 +157,7 @@ mod tests {
         };
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer).unwrap();
+        let length = record.serialize_to_slice(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":0b0010006164647265737320676170a7");
     }
@@ -101,7 +167,7 @@ mod tests {
         let record = IHex::EndOfFile;
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer).unwrap();
+        let length = record.serialize_to_slice(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":00000001ff");
     }
@@ -111,7 +177,7 @@ mod tests {
         let record = IHex::ExtendedSegmentAddress(0x12FE);
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer).unwrap();
+        let length = record.serialize_to_slice(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":0200000212feec");
     }
@@ -124,7 +190,7 @@ mod tests {
         };
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer).unwrap();
+        let length = record.serialize_to_slice(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":04000003123438007b");
     }
@@ -134,7 +200,7 @@ mod tests {
         let record = IHex::ExtendedLinearAddress(0xABCD);
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer).unwrap();
+        let length = record.serialize_to_slice(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":02000004abcd82");
     }
@@ -144,7 +210,7 @@ mod tests {
         let record = IHex::StartLinearAddress(0x12345678);
 
         let mut buffer = [0; 0x200];
-        let length = record.serialize(&mut buffer).unwrap();
+        let length = record.serialize_to_slice(&mut buffer).unwrap();
 
         assert_eq!(&buffer[..length], b":0400000512345678e3");
     }

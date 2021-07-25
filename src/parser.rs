@@ -5,6 +5,11 @@ use core::fmt;
 use core::iter::FusedIterator;
 use core::str::FromStr;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     MissingColon,
@@ -75,15 +80,29 @@ impl IHex {
 
         match record_type {
             types::DATA => {
-                let mut bytes = [0; 0xFF];
+                let ihex_data;
 
-                bytes[..data.len()].clone_from_slice(data);
+                #[cfg(feature = "alloc")]
+                {
+                    ihex_data = IHex::Data {
+                        bytes: Vec::from(data),
+                        length,
+                        offset: address,
+                    };
+                }
+                #[cfg(not(feature = "alloc"))]
+                {
+                    let mut bytes = [0; 0xFF];
+                    bytes[..data.len()].clone_from_slice(data);
 
-                Ok(IHex::Data {
-                    bytes,
-                    length,
-                    offset: address,
-                })
+                    ihex_data = IHex::Data {
+                        bytes,
+                        length,
+                        offset: address,
+                    };
+                }
+
+                Ok(ihex_data)
             }
             types::END_OF_FILE => Ok(IHex::EndOfFile),
             types::EXTENDED_SEGMENT_ADDRESS => {
@@ -176,7 +195,28 @@ impl<'a> FusedIterator for Parser<'a> {}
 mod tests {
     use super::*;
 
+    #[cfg(feature = "alloc")]
+    use alloc::vec;
+
     #[test]
+    #[cfg(feature = "alloc")]
+    fn parse_data() {
+        let bytes = vec![
+            0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x20, 0x67, 0x61, 0x70,
+        ];
+        let length = bytes.len() as u8;
+
+        let data = IHex::Data {
+            bytes,
+            length,
+            offset: 0x0010,
+        };
+
+        assert_eq!(":0B0010006164647265737320676170A7".parse(), Ok(data));
+    }
+
+    #[test]
+    #[cfg(not(feature = "alloc"))]
     fn parse_data() {
         let expected = [
             0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x20, 0x67, 0x61, 0x70,
