@@ -20,12 +20,12 @@ pub enum IHex {
 impl IHex {
     pub fn record_type(&self) -> u8 {
         match self {
-            Self::Data { .. } => types::DATA,
-            Self::EndOfFile => types::END_OF_FILE,
-            Self::ExtendedSegmentAddress(_) => types::EXTENDED_SEGMENT_ADDRESS,
-            Self::StartSegmentAddress { .. } => types::START_SEGMENT_ADDRESS,
-            Self::ExtendedLinearAddress(_) => types::EXTENDED_LINEAR_ADDRESS,
-            Self::StartLinearAddress(_) => types::START_LINEAR_ADDRESS,
+            IHex::Data { .. } => types::DATA,
+            IHex::EndOfFile => types::END_OF_FILE,
+            IHex::ExtendedSegmentAddress(_) => types::EXTENDED_SEGMENT_ADDRESS,
+            IHex::StartSegmentAddress { .. } => types::START_SEGMENT_ADDRESS,
+            IHex::ExtendedLinearAddress(_) => types::EXTENDED_LINEAR_ADDRESS,
+            IHex::StartLinearAddress(_) => types::START_LINEAR_ADDRESS,
         }
     }
 }
