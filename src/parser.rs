@@ -79,20 +79,20 @@ impl IHex {
 
                 bytes[..data.len()].clone_from_slice(data);
 
-                Ok(IHex::Data {
+                Ok(Self::Data {
                     bytes,
                     length,
                     offset: address,
                 })
             }
-            types::END_OF_FILE => Ok(IHex::EndOfFile),
+            types::END_OF_FILE => Ok(Self::EndOfFile),
             types::EXTENDED_SEGMENT_ADDRESS => {
                 let mut short = [0; 2];
 
                 short.clone_from_slice(&data[0..2]);
                 let address = u16::from_be_bytes(short);
 
-                Ok(IHex::ExtendedSegmentAddress(address))
+                Ok(Self::ExtendedSegmentAddress(address))
             }
             types::START_SEGMENT_ADDRESS => {
                 let mut short = [0; 2];
@@ -103,7 +103,7 @@ impl IHex {
                 short.clone_from_slice(&data[2..4]);
                 let ip = u16::from_be_bytes(short);
 
-                Ok(IHex::StartSegmentAddress { cs, ip })
+                Ok(Self::StartSegmentAddress { cs, ip })
             }
             types::EXTENDED_LINEAR_ADDRESS => {
                 let mut short = [0; 2];
@@ -111,7 +111,7 @@ impl IHex {
                 short.clone_from_slice(&data[0..2]);
                 let ela = u16::from_be_bytes(short);
 
-                Ok(IHex::ExtendedLinearAddress(ela))
+                Ok(Self::ExtendedLinearAddress(ela))
             }
             types::START_LINEAR_ADDRESS => {
                 let mut word = [0; 4];
@@ -119,7 +119,7 @@ impl IHex {
                 word.clone_from_slice(&data[0..4]);
                 let sla = u32::from_be_bytes(word);
 
-                Ok(IHex::StartLinearAddress(sla))
+                Ok(Self::StartLinearAddress(sla))
             }
             _ => Err(ParseError::BadType),
         }
@@ -130,7 +130,7 @@ impl FromStr for IHex {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        IHex::parse(s)
+        Self::parse(s)
     }
 }
 
