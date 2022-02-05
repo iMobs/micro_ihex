@@ -9,10 +9,7 @@ pub enum SerializeError {
 type SerializeResult = Result<usize, SerializeError>;
 
 impl IHex {
-    pub fn serialize<T>(&self, buffer: &mut T) -> SerializeResult
-    where
-        T: AsMut<[u8]>,
-    {
+    pub fn serialize<T: AsMut<[u8]>>(&self, buffer: &mut T) -> SerializeResult {
         let record_type = self.record_type();
 
         match self {
@@ -42,10 +39,12 @@ impl IHex {
     }
 }
 
-fn format<T>(record_type: u8, offset: u16, data: &[u8], buffer: &mut T) -> SerializeResult
-where
-    T: AsMut<[u8]>,
-{
+fn format<T: AsMut<[u8]>>(
+    record_type: u8,
+    offset: u16,
+    data: &[u8],
+    buffer: &mut T,
+) -> SerializeResult {
     let buffer = buffer.as_mut();
     let data_length = 1 + 2 + 1 + data.len() + 1;
 
